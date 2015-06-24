@@ -1,5 +1,7 @@
 # A gem to interact with the NAVITIA API
 
+[![Build Status](https://travis-ci.org/paulRbr/navitia_api.svg)](https://travis-ci.org/paulRbr/navitia_api) [![Coverage Status](https://coveralls.io/repos/paulRbr/navitia_api/badge.svg)](https://coveralls.io/r/paulRbr/navitia_api)
+
 ## Description
 
 This gem wraps the new NAVITIA API v1 available at https://api.sncf.com
