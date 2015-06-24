@@ -4,9 +4,9 @@ $LOAD_PATH.unshift(File.dirname(__FILE__)) unless
 require 'rubygems'
 require 'json'
 
-require 'navitia_api/errors'
+require 'api'
+
 require 'navitia_api/default'
-require 'navitia_api/configurable'
 require 'navitia_api/client'
 #require 'navitia_api/base'
 #require 'navitia_api/stop'
@@ -18,7 +18,8 @@ require 'navitia_api/version'
 module NavitiaApi
 
   class << self
-    include NavitiaApi::Configurable
+
+    include Api::Configurable
 
     # API client based on configured options {Configurable}
     #
@@ -30,7 +31,7 @@ module NavitiaApi
 
     private
 
-    def respond_to_missing?(method_name, include_private=false)
+    def respond_to_missing?(method_name, include_private = false)
       client.respond_to?(method_name, include_private)
     end
 

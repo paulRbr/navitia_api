@@ -9,13 +9,7 @@ describe NavitiaApi do
     NavitiaApi.reset!
   end
 
-  it "sets defaults" do
-    NavitiaApi::Configurable.keys.each do |key|
-      expect(NavitiaApi.instance_variable_get(:"@#{key}")).to eq(NavitiaApi::Default.send(key))
-    end
-  end
-
-  describe "::client" do
+ describe "::client" do
     it "creates an NavitiaApi::Client" do
       expect(NavitiaApi.client).to be_kind_of NavitiaApi::Client
     end
@@ -33,7 +27,7 @@ describe NavitiaApi do
   end
 
   describe ".configure" do
-    NavitiaApi::Configurable.keys.each do |key|
+    Api::Configurable.keys.each do |key|
       it "sets the #{key.to_s.gsub('_', ' ')}" do
         NavitiaApi.configure do |config|
           config.send("#{key}=", key)

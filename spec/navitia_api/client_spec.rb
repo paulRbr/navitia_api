@@ -16,7 +16,7 @@ describe NavitiaApi::Client do
     before do
       NavitiaApi.reset!
       NavitiaApi.configure do |config|
-        NavitiaApi::Configurable.keys.each do |key|
+        Api::Configurable.keys.each do |key|
           config.send("#{key}=", "Some #{key}")
         end
       end
@@ -27,8 +27,8 @@ describe NavitiaApi::Client do
     end
 
     it "inherits the module configuration" do
-      client = NavitiaApi::Client.new
-      NavitiaApi::Configurable.keys.each do |key|
+      client = NavitiaApi.client
+      Api::Configurable.keys.each do |key|
         expect(client.instance_variable_get(:"@#{key}")).to eq("Some #{key}")
       end
     end
@@ -58,10 +58,16 @@ describe NavitiaApi::Client do
         expect(client.instance_variable_get(:"@access_token")).to eq("il0veruby")
       end
 
-     it "masks tokens on inspect" do
+      it "masks tokens on inspect" do
         client = NavitiaApi::Client.new(:access_token => 'token123')
         inspected = client.inspect
-        expect(inspected).not_to include("tokent123")
+        expect(inspected).not_to include("token123")
+      end
+
+      it "masks basic login on inspect" do
+        client = NavitiaApi::Client.new(:basic_login => 'loginwhichisactuallyapassword')
+        inspected = client.inspect
+        expect(inspected).not_to include("loginwhichisactuallyapassword")
       end
     end
   end
@@ -79,8 +85,11 @@ describe NavitiaApi::Client do
       it "sets token with .configure" do
         NavitiaApi.configure do |config|
           config.access_token = 'token123'
+          config.basic_login = 'login'
+          config.basic_password = ''
         end
         expect(NavitiaApi.client).to be_token_authenticated
+        expect(NavitiaApi.client).to be_basic_authenticated
       end
       it "sets token with module methods" do
         NavitiaApi.access_token = 'token123'
@@ -91,18 +100,20 @@ describe NavitiaApi::Client do
     describe "with class level config" do
       it "sets token with instance methods" do
         @client.access_token = 'token123'
+        @client.basic_login = 'login'
         expect(@client).to be_token_authenticated
+        expect(@client).to be_basic_authenticated
       end
     end
 
-    describe "when token authenticated", :vcr do
+    describe "when basic authenticated", :vcr do
       it "makes authenticated calls" do
-        client = token_client
+        client = basic_auth_client
 
-        root_request = stub_get("/").
-          with(:headers => {:authorization => "token #{test_token}"})
+        stops_request = stub_get("/", { :basic_login => client.basic_login })
+          .and_return(:status => 200)
         client.get("/")
-        assert_requested root_request
+        assert_requested stops_request
       end
     end
   end
@@ -124,11 +135,13 @@ describe NavitiaApi::Client do
     it "fetches the API root" do
       NavitiaApi.reset!
       VCR.use_cassette 'root' do
-        root = NavitiaApi.client.root
-        expect(root.inspect).to match("Current version of navitia API")
+        expect {
+          NavitiaApi.client.root
+        }.to_not raise_error
+        expect(NavitiaApi.client.last_response.data[:links].count).to be(3)
       end
     end
- end
+  end
 
   describe ".last_response", :vcr do
     before do
@@ -137,10 +150,9 @@ describe NavitiaApi::Client do
 
     it "caches the last agent response" do
       NavitiaApi.reset!
-      client = NavitiaApi.client
-      expect(client.last_response).to be_nil
-      client.get "/"
-      expect(client.last_response.status).to eq(200)
+      expect(NavitiaApi.client.last_response).to be_nil
+      NavitiaApi.client.get "/"
+      expect(NavitiaApi.client.last_response.status).to eq(200)
     end
   end # .last_response
 
@@ -149,22 +161,27 @@ describe NavitiaApi::Client do
       NavitiaApi.reset!
     end
     it "handles query params" do
-      NavitiaApi.get "/", :foo => "bar"
-      assert_requested :get, "https://api.sncf.com?foo=bar"
+      NavitiaApi.client.get "/", :foo => "bar"
+      assert_requested :get, "https://api.sncf.com/v1/?foo=bar"
     end
     it "handles headers" do
-      request = stub_get("/zen").
+      request = stub_get("/").
         with(:query => {:foo => "bar"}, :headers => {:accept => "text/plain"})
-      NavitiaApi.get "/zen", :foo => "bar", :accept => "text/plain"
+      NavitiaApi.client.get "/", :foo => "bar", :accept => "text/plain"
       assert_requested request
     end
   end # .get
 
   describe "when making requests" do
     before do
+      VCR.turn_off!
       NavitiaApi.reset!
       @client = NavitiaApi.client
     end
+    after do
+      VCR.turn_on!
+    end
+
     it "sets a default user agent" do
       root_request = stub_get("/").
         with(:headers => {:user_agent => NavitiaApi::Default.user_agent})
@@ -176,68 +193,13 @@ describe NavitiaApi::Client do
       user_agent = "Mozilla/5.0 I am Spartacus!"
       root_request = stub_get("/").
         with(:headers => {:user_agent => user_agent})
-      client = NavitiaApi::Client.new(:user_agent => user_agent)
-      client.get "/"
+      NavitiaApi.configure do |c|
+        c.user_agent = user_agent
+      end
+      expect(NavitiaApi.client.user_agent).to eq(user_agent)
+      NavitiaApi.client.get "/"
       assert_requested root_request
-      expect(client.last_response.status).to eq(200)
-    end
-  end
-
-  describe "redirect handling" do
-    it "follows redirect for 301 response" do
-      client = token_client
-
-      original_request = stub_get("/foo").
-        to_return(:status => 301, :headers => { "Location" => "/bar" })
-      redirect_request = stub_get("/bar").to_return(:status => 200)
-
-      client.get("/foo")
-      assert_requested original_request
-      assert_requested redirect_request
-    end
-
-    it "follows redirect for 302 response" do
-      client = token_client
-
-      original_request = stub_get("/foo").
-        to_return(:status => 302, :headers => { "Location" => "/bar" })
-      redirect_request = stub_get("/bar").to_return(:status => 200)
-
-      client.get("/foo")
-      assert_requested original_request
-      assert_requested redirect_request
-    end
-
-    it "keeps authentication info when redirecting to the same host" do
-      client = token_client
-
-      original_request = stub_get("/foo").
-        with(:headers => {"Authorization" => "token #{test_token}"}).
-        to_return(:status => 301, :headers => { "Location" => "/bar" })
-      redirect_request = stub_get("/bar").
-        with(:headers => {"Authorization" => "token #{test_token}"}).
-        to_return(:status => 200)
-
-      client.get("/foo")
-      assert_requested original_request
-      assert_requested redirect_request
-    end
-
-    it "drops authentication info when redirecting to a different host" do
-      client = token_client
-
-      original_request = stub_request(:get, navitia_url("/foo")).
-        with(:headers => {"Authorization" => "token #{test_token}"}).
-        to_return(:status => 301, :headers => { "Location" => "https://example.com/bar" })
-      redirect_request = stub_request(:get, "https://example.com/bar").
-        to_return(:status => 200)
-
-      client.get("/foo")
-
-      assert_requested original_request
-      assert_requested(:get, "https://example.com/bar") { |req|
-        req.headers["Authorization"].nil?
-      }
+      expect(NavitiaApi.client.last_response.status).to eq(200)
     end
   end
 
@@ -253,12 +215,17 @@ describe NavitiaApi::Client do
 
     it "raises on 404" do
       stub_get('/booya').to_return(:status => 404)
-      expect { NavitiaApi.get('/booya') }.to raise_error NavitiaApi::NotFound
+      expect { NavitiaApi.get('/booya') }.to raise_error Api::NotFound
+    end
+
+    it "raises on 401" do
+      stub_get('/forbidden').to_return(:status => 401)
+      expect { NavitiaApi.get('/forbidden') }.to raise_error Api::Unauthorized
     end
 
     it "raises on 500" do
       stub_get('/boom').to_return(:status => 500)
-      expect { NavitiaApi.get('/boom') }.to raise_error NavitiaApi::InternalServerError
+      expect { NavitiaApi.get('/boom') }.to raise_error Api::InternalServerError
     end
   end
 end

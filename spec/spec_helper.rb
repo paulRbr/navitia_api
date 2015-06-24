@@ -16,8 +16,8 @@ WebMock.disable_net_connect!(:allow => 'coveralls.io')
 require 'vcr'
 VCR.configure do |c|
   c.configure_rspec_metadata!
-  c.filter_sensitive_data("<<ACCESS_TOKEN>>") do
-    test_token
+  c.filter_sensitive_data("<<BASIC_LOGIN>>") do
+    test_login
   end
   c.default_cassette_options = {
     :serialize_with             => :json,
@@ -29,25 +29,26 @@ VCR.configure do |c|
   c.hook_into :webmock
 end
 
-def navitia_url(url)
+def navitia_url(url, opts = {})
   return url if url =~ /^http/
 
-  url = File.join(NavitiaApi.api_endpoint, url)
+  url = File.join(NavitiaApi.api_endpoint, NavitiaApi.api_version, url)
+  url.gsub!("https://", "https://#{opts[:basic_login]}:#{opts[:basic_password]}@") if opts[:basic_login]
   uri = Addressable::URI.parse(url)
 
   uri.to_s
 end
 
-def token_client
-  NavitiaApi::Client.new(:access_token => test_token)
+def basic_auth_client
+  NavitiaApi::Client.new(:basic_login => test_login)
 end
 
-def test_token
-  ENV.fetch 'NAVITIA_TEST_TOKEN', 'x' * 20
+def test_login
+  ENV.fetch 'NAVITIA_TEST_LOGIN', 'x' * 20
 end
 
-def stub_get(url)
-  stub_request(:get, navitia_url(url))
+def stub_get(url, opts = {})
+  stub_request(:get, navitia_url(url, opts))
 end
 
 def fixture_path

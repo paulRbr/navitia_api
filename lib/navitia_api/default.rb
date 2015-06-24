@@ -1,4 +1,4 @@
-require 'navitia_api/response/raise_error'
+require "api/default_options"
 
 module NavitiaApi
 
@@ -12,20 +12,22 @@ module NavitiaApi
     API_VERSION = "v1".freeze
 
     # Default User Agent header string
-    USER_AGENT   = "Sncf API Ruby Gem #{NavitiaApi::VERSION}".freeze
+    USER_AGENT   = "Navitia API Ruby Gem #{NavitiaApi::VERSION}".freeze
 
     class << self
 
-      # Configuration options
-      # @return [Hash]
-      def options
-        Hash[NavitiaApi::Configurable.keys.map{|key| [key, send(key)]}]
-      end
+      include Api::DefaultOptions
 
       # Default access token from ENV
       # @return [String]
       def access_token
         ENV['NAVITIA_ACCESS_TOKEN']
+      end
+
+      # Default access token prefix
+      # @return [String]
+      def access_token_prefix
+        ""
       end
 
       # Default API endpoint from ENV or {API_ENDPOINT}
@@ -40,7 +42,7 @@ module NavitiaApi
         ENV['NAVITIA_API_VERSION'] || API_VERSION
       end
 
-     # Default options for Faraday::Connection
+    # Default options for Faraday::Connection
       # @return [Hash]
       def connection_options
         {
@@ -50,6 +52,8 @@ module NavitiaApi
         }
       end
 
+      # Default User-Agent header string from ENV or {USER_AGENT}
+      # @return [String]
       # Default User-Agent header string from ENV or {USER_AGENT}
       # @return [String]
       def user_agent
